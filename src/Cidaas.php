@@ -35,6 +35,7 @@ class Cidaas
     private string $redirectUri = "";
     private HandlerStack $handler;
     private bool $debug = false;
+    private bool $replaceBaseUrl = false;
     /** @var bool has the init method already been called? */
     private bool $init = false;
 
@@ -47,7 +48,7 @@ class Cidaas
      * @param HandlerStack|null $handler (optional) for http requests
      * @param bool $debug (optional) to enable debugging
      */
-    public function __construct(string $baseUrl, string $clientId, string $clientSecret, string $redirectUri, HandlerStack $handler = null, bool $debug = false)
+    public function __construct(string $baseUrl, string $clientId, string $clientSecret, string $redirectUri, HandlerStack $handler = null, bool $debug = false, $replaceBaseUrl = false)
     {
         $this->validate($baseUrl, 'Base URL');
         $this->validate($clientId, 'Client-ID');
@@ -62,6 +63,7 @@ class Cidaas
             $this->handler = $handler;
         }
         $this->debug = $debug;
+        $this->replaceBaseUrl = $replaceBaseUrl;
     }
 
     /**
@@ -823,6 +825,10 @@ class Cidaas
             RequestOptions::BODY => $postBody,
             RequestOptions::HEADERS => $headers
         ];
+        if($this->replaceBaseUrl) {
+            $url = $this->baseUrl . parse_url($url, PHP_URL_PATH);
+        }
+        error_log($url);
         $responsePromise = $client->requestAsync('POST', $url, $options);
         return $responsePromise->then(function (ResponseInterface $response) {
             $body = $response->getBody();
