@@ -367,24 +367,20 @@ class Cidaas
      * @return PromiseInterface promise with user profile or error
      */
     public function getUserProfile(string $accessToken, string $sub = ""): PromiseInterface
-    {
+    {                                                    
         $client = $this->createClient();
         $url = $this->openid_config["userinfo_endpoint"];
-        if (!empty($sub)) {
-            $url .= "/" . $sub;
-        }
-
-        $responsePromise = $client->requestAsync('POST', $url, [
-            "headers" => [
-                "Authorization" => "Bearer " . $accessToken,
-                'Content-Type' => 'application/json',
-            ],
-        ]);
-        return $responsePromise->then(function (ResponseInterface $response) {
-            $body = $response->getBody();
-            return $this->parseJson($body);
-        });
-    }
+        if (!empty($sub)) {      
+            $url .= "/" . $sub;   
+        }                             
+                                     
+        $headers =  [                                           
+                "Authorization" => "Bearer " . $accessToken,    
+                'Content-Type' => 'application/json',       
+            ];                                               
+                                                     
+        return $this->makeRequest([], $url, $headers);          
+    }                  
 
     /**
      * Start a password reset process.
@@ -828,7 +824,7 @@ class Cidaas
         if($this->replaceBaseUrl) {
             $url = $this->baseUrl . parse_url($url, PHP_URL_PATH);
         }
-        error_log($url);
+        //error_log($url);
         $responsePromise = $client->requestAsync('POST', $url, $options);
         return $responsePromise->then(function (ResponseInterface $response) {
             $body = $response->getBody();
