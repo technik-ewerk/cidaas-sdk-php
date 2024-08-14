@@ -33,6 +33,7 @@ class Cidaas
     private string $clientId = "";
     private string $clientSecret = "";
     private string $redirectUri = "";
+    private bool $pkceEnabled = false;
     private HandlerStack $handler;
     private bool $debug = false;
     private bool $replaceBaseUrl = false;
@@ -48,11 +49,16 @@ class Cidaas
      * @param HandlerStack|null $handler (optional) for http requests
      * @param bool $debug (optional) to enable debugging
      */
-    public function __construct(string $baseUrl, string $clientId, string $clientSecret, string $redirectUri, HandlerStack $handler = null, bool $debug = false, $replaceBaseUrl = false)
+    public function __construct(string $baseUrl, string $clientId, string $clientSecret, string $redirectUri, HandlerStack $handler = null, bool $pkceEnabled = false, bool $debug = false, $replaceBaseUrl = false)
     {
+        $this->pkceEnabled = $pkceEnabled;
         $this->validate($baseUrl, 'Base URL');
         $this->validate($clientId, 'Client-ID');
-        $this->validate($clientSecret, 'Client-Secret');
+        //
+        if(!$this->pkceEnabled) {
+            $this->validate($clientSecret, 'Client-Secret');
+        }
+        //
         $this->validate($redirectUri, 'Redirect URL');
 
         $this->baseUrl = rtrim($baseUrl, "/");
@@ -214,9 +220,8 @@ class Cidaas
      * @param array $queryParameters (optional) optionally adds more query parameters to the url.
      * @throws LogicException if no loginUrl has been set
      */
-    public function loginWithBrowser(string $scope = 'openid profile offline_access', array $queryParameters = array(), bool $pkceEnabled = false)
+    public function loginWithBrowser(string $scope = 'openid profile offline_access', array $queryParameters = array() )
     {
-        $client = $this->createClient();
         $loginUrl = $this->openid_config['authorization_endpoint'];
         $loginUrl .= '?client_id=' . $this->clientId;
         $loginUrl .= '&response_type=code';
@@ -225,7 +230,7 @@ class Cidaas
         $loginUrl .= '&nonce=' . time();
         $loginUrl .= '&view_type=' . "login";
 
-        if ($pkceEnabled) {
+        if ($this->pkceEnabled) {
             session_start();
             $code_verifier = bin2hex(random_bytes(64));
             $_SESSION['code-verifier'] = $code_verifier;
@@ -313,40 +318,35 @@ class Cidaas
      * @param string $refreshToken only required for {@see GrantType::$RefreshToken}
      * @return PromiseInterface promise with access token or error
      */
-    public function getAccessToken(string $grantType, string $code = '', string $refreshToken = '', bool $pkceEnabled = false): PromiseInterface
+    public function getAccessToken(string $grantType, string $code = '', string $refreshToken = ''): PromiseInterface
     {
+        $params = [
+            'client_id' => $this->clientId,
+            'redirect_uri' => $this->redirectUri,
+            'code' => $code,
+        ];
+        //
         if ($grantType === GrantType::AuthorizationCode) {
             if (empty($code)) {
                 throw new \InvalidArgumentException('code must not be empty in authorization_code flow');
             }
-
-            $params = [
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'redirect_uri' => $this->redirectUri,
-                'grant_type' => 'authorization_code',
-                'code' => $code,
-            ];
-
-            if ($pkceEnabled) {
+            //
+            $params[ 'grant_type' ] = 'authorization_code';
+            //
+            if ($this->pkceEnabled) {
                 $params["code_verifier"] = $_SESSION['code-verifier'];
+            } else {
+                $params['client_secret'] = $this->clientSecret;
             }
         } else if ($grantType === GrantType::RefreshToken) {
             if (empty($refreshToken)) {
                 throw new \InvalidArgumentException('refreshToken must not be empty in refresh_token flow');
             }
-            $params = [
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'grant_type' => 'refresh_token',
-                'refresh_token' => $refreshToken,
-            ];
+            //
+            $params[ 'grant_type' ] = 'refresh_token';
+            $params[ 'refresh_token' ] = $refreshToken;
         } else if ($grantType === GrantType::ClientCredentials) {
-            $params = [
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'grant_type' => 'client_credentials',
-            ];
+            $params[ 'grant_type' ] = 'client_credentials';
         } else {
             throw new \InvalidArgumentException('invalid grant type');
         }
@@ -575,7 +575,7 @@ class Cidaas
     {
         $url = $this->baseUrl . "/login-srv/social/login/" . strtolower($provider_name) . "/" . $request_id;
         foreach ($queryParameters as $key => $value) {
-            $registerUrl .= '&' . $key . '=' . $value;
+            $url .= '&' . $key . '=' . $value;
         }
         header('Location: ' . $url);
     }
@@ -590,7 +590,7 @@ class Cidaas
     {
         $url = $this->baseUrl . "/login-srv/social/register/" . strtolower($provider_name) . "/" . $request_id;
         foreach ($queryParameters as $key => $value) {
-            $registerUrl .= '&' . $key . '=' . $value;
+            $url .= '&' . $key . '=' . $value;
         }
         header('Location: ' . $url);
     }
@@ -671,7 +671,7 @@ class Cidaas
             'Content-type' => 'application/json',
             'requestId' => $requestId,
             'trackId' => $trackId,
-            'acceptlanguage' => $acceptlanguage
+            'acceptlanguage' => $acceptLanguage
         ];
         return $this->makeRequest($params, $url, $headers);
     }
@@ -821,10 +821,11 @@ class Cidaas
             RequestOptions::BODY => $postBody,
             RequestOptions::HEADERS => $headers
         ];
+        //
         if($this->replaceBaseUrl) {
             $url = $this->baseUrl . parse_url($url, PHP_URL_PATH);
         }
-        //error_log($url);
+        //
         $responsePromise = $client->requestAsync('POST', $url, $options);
         return $responsePromise->then(function (ResponseInterface $response) {
             $body = $response->getBody();
