@@ -49,7 +49,7 @@ class Cidaas
      * @param HandlerStack|null $handler (optional) for http requests
      * @param bool $debug (optional) to enable debugging
      */
-    public function __construct(string $baseUrl, string $clientId, string $clientSecret, string $redirectUri, HandlerStack $handler = null, bool $pkceEnabled = false, bool $debug = false, $replaceBaseUrl = false)
+    public function __construct(string $baseUrl, string $clientId, string $clientSecret = '', string $redirectUri, HandlerStack $handler = null, bool $pkceEnabled = false, bool $debug = false, $replaceBaseUrl = false)
     {
         $this->pkceEnabled = $pkceEnabled;
         $this->validate($baseUrl, 'Base URL');
